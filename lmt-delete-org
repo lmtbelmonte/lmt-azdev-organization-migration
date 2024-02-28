@@ -1,0 +1,119 @@
+# author        : Luis Merino
+# creation Date : 18/01/2024
+# Description   : Python script that access the AzDev REST API to manage Organization proceses 
+
+
+import requests
+import os
+import base64
+from dotenv import load_dotenv
+from openpyxl import Workbook
+import uuid
+
+## Read all the sensible informaton from Envionment Variables for security reasons and for ease of use
+#
+load_dotenv()
+
+# Azure DevOps API url  
+
+# URL for asking for a proces by ID
+# https://dev.azure.com/{organization}/_apis/process/processes/{processId}?api-version=7.1-preview.1
+
+# Url for asking 
+# https://dev.azure.com/{organization}/_apis/work/processes?api-version=7.1-preview.2
+
+azure_organization = "XXXXXX"
+azure_project_name = "XXXXXXX"
+username= "dummy-username"
+
+azure_devops_url = f"https://dev.azure.com/{azure_organization}"
+
+# Azure DevOps token  
+azure_devops_token = os.getenv("API_TOKEN")
+combined_pat_token = username + ":" + azure_devops_token
+
+# proxies
+proxy = os.getenv("HTTP_PROXY")
+proxy_s  = os.environ["HTTPS_PROXY"]
+
+# Switch to procees only one or the whole organization
+manual_process_id = "Process TypeId "
+
+# By default set to N so it doesnt delete 
+delete_yn = "N"
+
+# File name of the excel file with random name generated with uuid
+excel_filename = f"{azure_organization}-del-Proceses-{str(uuid.uuid4())}.xlsx"
+
+# Create the initial excel workbook  
+workbook = Workbook()
+
+# Create an excel sheet for deleted processid  
+devops_deleted_sheet = workbook.create_sheet('Devops Deleted Processes')
+devops_deleted_sheet.append(['TypeId', 'Name', 'ReferenceName', 'Description', 'Parent ProcessTypeID', 'Is Enabled', 'Is Default', 'Customization Type'])
+    
+# get ONE Azure Devops Organization Proceses 
+def get_one_azure_devops_process(process_id):
+    endpoint = f"{azure_devops_url}/_apis/work/processes/{process_id}?api-version=7.1-preview.2"
+    headers  = {
+        "Content-Type" : "application/json",
+        "Authorization": b"Basic " + base64.b64encode(combined_pat_token.encode('utf-8'))
+    }
+    proxies = {
+        "http"  : proxy,
+        "https" : proxy_s
+    }
+           
+    response = requests.get(endpoint, headers=headers, proxies=proxies)
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+       print(f"Error in get proceses: {response.status_code}, {response.text}")
+       return None
+
+# Delete Organization Process with processid 
+def delete_process(process_id):
+    endpoint = f"{azure_devops_url}/_apis/work/processes/{process_id}?api-version=7.1-preview.2"
+    headers  = {
+        "Content-Type" : "application/json",
+        "Authorization": b"Basic " + base64.b64encode(combined_pat_token.encode('utf-8'))
+    }
+    proxies = {
+        "http"  : proxy,
+        "https" : proxy_s
+    }
+
+    response = requests.delete(endpoint, headers=headers, proxies=proxies)
+    
+    if response.status_code == 202:
+        print(f"Process ID {process_id} deleted successfully.")
+        return process_id
+    else:
+        print(f"Error deleting process: {process_id}: {response.status_code} > {response.text}")
+
+
+# Main program
+if __name__ == "__main__":
+    # we get ONE process for organization
+    devops_process = get_one_azure_devops_process(manual_process_id)
+    
+    proc_typeid          = devops_process["typeId"]
+    proc_name            = devops_process["name"]
+    proc_referencename   = devops_process["referenceName"]
+    proc_description     = devops_process["description"]
+    proc_ParentProcestype= devops_process["parentProcessTypeId"]
+    proc_isenabled       = devops_process["isEnabled"]
+    proc_isDefault       = devops_process["isDefault"]
+    proc_CustType        = devops_process["customizationType"]
+    
+    print(f"Process Typeid  : {proc_typeid}  Name : {proc_name}")
+    
+    if delete_yn == "Y":
+       deleted_process_id = delete_process(proc_typeid)
+       if deleted_process_id:
+          devops_deleted_sheet.append([deleted_process_id, proc_name, proc_referencename, proc_description, proc_ParentProcestype, proc_isenabled, proc_isDefault, proc_CustType])
+          workbook.save(excel_filename)
+       else:
+          print(f"no Process Typeid  : {proc_typeid}  Name : {proc_name}") 
+           
