@@ -1,0 +1,85 @@
+# author        : Luis Merino
+# creation Date : 18/01/2024
+# Description   : Python script that access the AzDev REST API to list Organization proceses 
+
+
+import requests
+import os
+import base64
+from dotenv import load_dotenv
+from openpyxl import Workbook
+import uuid
+
+## Read all the sensible informaton from Envionment Variables for security reasons and for ease of use
+
+load_dotenv()
+
+# Azure DevOps API url  
+
+# Url for asking 
+# https://dev.azure.com/{organization}/_apis/work/processes?api-version=7.1-preview.2
+
+azure_organization = "XXXXXXXX"
+azure_project_name = "XXXXXX"
+username= "dummy-username"
+
+azure_devops_url = f"https://dev.azure.com/{azure_organization}"
+
+# Azure DevOps token  
+azure_devops_token = os.getenv("API_TOKEN")
+combined_pat_token = username + ":" + azure_devops_token
+
+# proxies
+proxy = os.getenv("HTTP_PROXY")
+proxy_s  = os.environ["HTTPS_PROXY"]
+
+# File name of the excel file with random name generated with uuid
+excel_filename = f"{azure_organization}-list-Procesess-{str(uuid.uuid4())}.xlsx"
+
+# Create the initial excel workbook  
+workbook = Workbook()
+
+# Create an excel sheet for id and titles from confluence
+devops_process_sheet = workbook.create_sheet('Devops Organization Processes')
+devops_process_sheet.append(['TypeId', 'Name', 'ReferenceName', 'Description', 'Parent ProcessTypeID', 'Is Enabled', 'Is Default', 'Customization Type'])
+
+# get Azure Devops Organization Proceses 
+def get_azure_devops_process():
+    endpoint = f"{azure_devops_url}/_apis/work/processes?api-version=7.1-preview.2"
+    headers  = {
+        "Content-Type" : "application/json",
+        "Authorization": b"Basic " + base64.b64encode(combined_pat_token.encode('utf-8'))
+    }
+    proxies = {
+        "http"  : proxy,
+        "https" : proxy_s
+    }
+           
+    response = requests.get(endpoint, headers=headers, proxies=proxies)
+   
+    if response.status_code == 200:
+        return response.json()["value"]
+    else:
+       print(f"Error in get proceses: {response.status_code}, {response.text}")
+       return None
+
+# Main program
+if __name__ == "__main__":
+    # First we get all the proceses for organization
+    azure_devops_process = get_azure_devops_process()
+
+    for process in azure_devops_process:
+        proc_typeid          = process["typeId"]
+        proc_name            = process["name"]
+        proc_referencename   = process["referenceName"]
+        proc_description     = process["description"]
+        proc_ParentProcestype= process["parentProcessTypeId"]
+        proc_isenabled       = process["isEnabled"]
+        proc_isDefault       = process["isDefault"]
+        proc_CustType        = process["customizationType"]
+
+        print(f"Type id  : {proc_typeid}  Name : {proc_name}")
+        
+
+        devops_process_sheet.append([proc_typeid, proc_name, proc_referencename, proc_description, proc_ParentProcestype, proc_isenabled, proc_isDefault, proc_CustType])
+        workbook.save(excel_filename)
