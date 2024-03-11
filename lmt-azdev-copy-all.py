@@ -16,6 +16,7 @@ from azure.devops.v6_0.pipelines import PipelinesClient
 from azure.devops.v6_0.boards import BoardsClient
 import json
 import os
+import git
 
 azure_prod_organization    = "XXXXXXXX"
 azure_sandbox_organization = "XXXXXXXX"
